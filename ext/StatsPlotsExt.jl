@@ -49,13 +49,14 @@ BayesianSurvival.plot_summary(lpdf, result; df, kwargs...) = begin
             for (key, col) in pairs(histograms)
         ]..., 
         [
-            Plots.boxplot(draws', title=key, c=2, label="")
+            Plots.boxplot(draws', title=key, c=2, label="", xlabel="sorted time id")
             for (key, draws) in pairs(boxplots)
         ]...,
         Plots.plot!(
             Plots.plot!(
                 Plots.plot(
-                    survival_curve(sorted_t), label="Observed", ylim=[0,1], marker=:circle
+                    survival_curve(sorted_t), label="Observed", ylim=[0,1], marker=:circle,
+                    xlabel="time", title="Survival function",
                 ),
                 sorted_t, survival_quantiles[1, :], fillrange=survival_quantiles[3, :], fillalpha=.25, c=2, alpha=0,
                 label="95% CrI"

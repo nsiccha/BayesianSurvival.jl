@@ -102,6 +102,8 @@ where $\log a$ is a scalar intercept, $\log\kappa_j$ is a time-varying (but pers
 
 ### `pem_survival_model`
 
+Based on [survivalstan's "Fitting a piecewise-exponential model (PEM) to simulated data" notebook](https://jburos.github.io/survivalstan/examples/Example-using-pem_survival_model.html).
+
 ::: {.panel-tabset}
 
 #### Discussion
@@ -128,11 +130,13 @@ plot_summary(sim.lr1...; sim.df)
 
 ### `pem_survival_model_randomwalk`
 
+Based on [survivalstan's "PEM survival model with random-walk baseline hazard" notebook](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_randomwalk%20with%20simulated%20data.html).
+
 ::: {.panel-tabset}
 
 #### Discussion
 
-Identical to the first model, except that the time-varying (but person-constant) effect $\log\kappa_j$ should have a "random walk" prior. AFAICT, the original model has the same small mistake as the first one (this time at line 43), but **IMO some (minor) other things goes "wrong" in constructing the "random walk" prior, or rather, I believe that instead of a random walk prior as implemented in the original code, an approximate Brownian motion / Wiener process prior would have been a better choice:**
+Identical to the first model, except that the time-varying (but person-constant) effect $\log\kappa_j$ should have a "random walk" prior. AFAICT, the original model has the same small mistake as the first one (this time at line 43), but **IMO some (minor) other thing goes "wrong" in constructing the "random walk" prior, or rather, I believe that instead of a random walk prior as implemented in the original code, an approximate Brownian motion / Wiener process prior would have been a better choice:**
 
 *A random walk prior as implemented in the original code will imply different priors for different numbers of persons and also for different realizations of the event times, while an approximate Wiener process prior does not (or rather, much less).* Consider the following:
 
@@ -149,7 +153,7 @@ and with $x_0$ another parameter with appropriate prior.
 Following [Wikipedia](https://en.wikipedia.org/wiki/Wiener_process):
 
 > The Wiener process $W_t$ is characterised by the following properties: 
-> [...] W has Gaussian increments: [...] $W_{t+i} - W_t \sim \mathcal{N}(0,u)$.
+> [...] W has Gaussian increments: [...] $W_{t+u} - W_t \sim \mathcal{N}(0,u)$.
 
 I.e., for timepoints $0 = t_0 < t_1 < t_2 < \dots$ as above, the (conditional) prior density of the (shifted) Wiener process
 values $x_1, x_2, \dots$ with scale parameter $\sigma$ is
@@ -168,7 +172,7 @@ while for the **Wiener process prior**, we'll have
 $$
 x_j \sim \mathcal{N}(0, t_j\sigma^2) \text{ for } j = 1,\dots,N+1.
 $$
-In particular, for $j=N+1$ (i.e. at censor time), we get a constant prior distribution for the Wiener process prior, but for the random walk prior we get a prior distribution that depends on the number of unique observed event times $N$. Similarly, even for fixed $N$, there is a (potentially strong) dependence of the implied prior for "interior" time slabs on the realization of the even times for the random walk prior, while there's "no" dependence of the implied prior for the Wiener process prior. *Caveat: There* will *actually be a dependence of the implied prior on the event time realizations also for the Wiener process, but this is only due to the piecewise-constant "assumption" and can be interpreted as an approximation error to the solution of the underlying stochastic differential equation.*
+In particular, for $j=N+1$ (i.e. at censor time), we get a constant prior distribution for the Wiener process prior, but for the random walk prior we get a prior distribution that depends on the number of unique observed event times $N$. Similarly, even for fixed $N$, there is a (potentially strong) dependence of the implied prior for "interior" time slabs on the realization of the even times for the random walk prior, while there's "no" dependence of the implied prior for the Wiener process prior. *Caveat: There* will *actually be a dependence of the implied prior for the* survival function *on the event time realizations also for the Wiener process, but this is only due to the piecewise-constant "assumption" and can be interpreted as an approximation error to the solution of the underlying stochastic differential equation.*
 
 
 
@@ -176,7 +180,7 @@ In particular, for $j=N+1$ (i.e. at censor time), we get a constant prior distri
 #### Posterior parameter and predictive plots
 
 ```{julia}
-plot_summary(sim.lr2...; sim.df)
+plot_summary(sim.lr2...; sim.df)     
 ```
 
 #### Reimplemented model
@@ -192,6 +196,8 @@ plot_summary(sim.lr2...; sim.df)
 :::
 
 ### `pem_survival_model_timevarying`
+
+Based on [survivalstan's "A PEM Survival Model with Time-Dependent Effects" notebook](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_timevarying%20with%20simulated%20data.html).
 
 ::: {.panel-tabset}
 
@@ -224,5 +230,5 @@ plot_summary(sim.lr3...; sim.df)
 ## Addendum / Disclaimer
 
 * I am aware that survivalstan hasn't been updated in the last 7 years (according to [github](https://github.com/hammerlab/survivalstan)). I have not implemented the above models to unearth any errors or write a competitor. I believe but haven't checked, that the "actual" models used by survivalstan are "more" correct. I was mainly curious whether I could do it, and I wanted to see how well [StanBlocks.jl](https://github.com/nsiccha/StanBlocks.jl) does.
-* I've skipped the `pem_survival_model_gamma` model showcased at [https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_gamma%20with%20simulated%20data.html](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_gamma%20with%20simulated%20data.html) because I did not understand why the widths of the timeslabs should affect the **shape** parameter of the Gamma prior. Only after implementing the time varying models did I discover the models at [https://nbviewer.org/github/hammerlab/survivalstan/blob/master/example-notebooks/Test%20new_gamma_survival_model%20with%20simulated%20data.ipynb](https://nbviewer.org/github/hammerlab/survivalstan/blob/master/example-notebooks/Test%20new_gamma_survival_model%20with%20simulated%20data.ipynb). Also, the ["Worked examples" page](https://jburos.github.io/survivalstan/Examples.html) lists a ["User-supplied PEM survival model with gammahazard"](https://jburos.github.io/survivalstan/examples/Test%20new_gamma_survival_model%20with%20simulated%20data.html), though for some reason it does not show up in the sidebar for either of the other examples, compare [https://jburos.github.io/survivalstan/examples/Example-using-pem_survival_model.html](https://jburos.github.io/survivalstan/examples/Example-using-pem_survival_model.html), [https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_gamma%20with%20simulated%20data.html](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_gamma%20with%20simulated%20data.html), [https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_randomwalk%20with%20simulated%20data.html](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_randomwalk%20with%20simulated%20data.html) and [https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_timevarying%20with%20simulated%20data.html](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_timevarying%20with%20simulated%20data.html).
+* I've skipped the `pem_survival_model_gamma` model showcased in [survivalstan's "Estimating a PEM survival model with Gamma baseline hazard" notebook](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_gamma%20with%20simulated%20data.html) because I did not understand why the widths of the timeslabs should affect the **shape** parameter of the Gamma prior. Only after implementing the time varying models did I discover the models at [https://nbviewer.org/github/hammerlab/survivalstan/blob/master/example-notebooks/Test%20new_gamma_survival_model%20with%20simulated%20data.ipynb](https://nbviewer.org/github/hammerlab/survivalstan/blob/master/example-notebooks/Test%20new_gamma_survival_model%20with%20simulated%20data.ipynb). Also, the ["Worked examples" page](https://jburos.github.io/survivalstan/Examples.html) lists a ["User-supplied PEM survival model with gammahazard"](https://jburos.github.io/survivalstan/examples/Test%20new_gamma_survival_model%20with%20simulated%20data.html), though for some reason it does not show up in the sidebar for either of the other examples, compare [Fitting a piecewise-exponential model (PEM) to simulated data](https://jburos.github.io/survivalstan/examples/Example-using-pem_survival_model.html), [Estimating a PEM survival model with Gamma baseline hazard](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_gamma%20with%20simulated%20data.html), [PEM survival model with random-walk baseline hazard](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_randomwalk%20with%20simulated%20data.html) and [A PEM Survival Model with Time-Dependent Effects](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_timevarying%20with%20simulated%20data.html).
  
