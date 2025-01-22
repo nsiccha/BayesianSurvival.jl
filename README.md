@@ -1,1 +1,0 @@
-# BayesianSurvival.jl
