@@ -53,7 +53,7 @@ $$
 
 ## Why do *this*? Why reimplement things?
 
-Out of curiosity, to figure out whether. and to demonstrate that I understand survival analysis. 
+Out of curiosity, to figure out whether and to demonstrate that I understand survival analysis. 
 Writing down the math is nice and all, but to get correct simulation results, every little detail has to be right. 
 At least in principle, in practice the simulation can still be subtly wrong due to errors which don't crash everything, but only e.g. introduce biases.
 
