@@ -1,6 +1,6 @@
 module BayesianSurvival
 
-export sim_data_exp_correlated, prep_data_long_surv, plot_observed_survival, pem_survival_model, fit_stan_survival_model
+export sim_data_exp_correlated, prep_data_long_surv, plot_summary, survival_model, fit_survival_model, pem_survival_model, pem_survival_model_randomwalk, pem_survival_model_timevarying
 
 using Random, Distributions, DataFrames, StanBlocks
 

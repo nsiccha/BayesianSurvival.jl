@@ -10,7 +10,9 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 StanBlocks = "2e771a56-c23a-4e0b-9282-20c2e37157e9"
 
 [weakdeps]
-Gadfly = "c91e804a-d5a3-530f-b6f0-dfbca275c004"
+DynamicHMC = "bbc10e6e-7c05-544b-b16e-64fede858acb"
+StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
 
 [extensions]
-GadflyExt = "Gadfly"
+DynamicHMCExt = "DynamicHMC"
+StatsPlotsExt = "StatsPlots"

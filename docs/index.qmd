@@ -1,0 +1,228 @@
+# Reproducing example models from `survivalstan`
+
+## Survival analysis - what's that?
+
+According to [Wikipedia](https://en.wikipedia.org/wiki/Survival_analysis): 
+
+> Survival analysis is a branch of statistics for analyzing the expected duration of time until one event occurs, such as death in biological organisms and failure in mechanical systems.
+
+We'll consider the setting used for the examples at [https://jburos.github.io/survivalstan/Examples.html](https://jburos.github.io/survivalstan/Examples.html). We will have a model which, for a set of persons, takes 
+
+* a set of covariates (age and gender per person),
+* a list of times at which the event either occurs, or until which the event did not occur (one time and event/survival indicator per person),
+
+and, after following standard Bayesian procedures via conditioning on observations, yields a way to predict the survival time of unobserved persons, given the same covariates.
+
+For fixed covariates $x$ and model parameters $\theta$, the models below will give us a way to compute a (piecewise exponential) survival function $S(t) = Pr(T > t)$, i.e. a function which models the probability that the event in question has not occured until the specified time $t$. Usually as well as in our setting, the survival function will be the solution to a simple [linear first-order differential equation with variable coefficients](https://en.wikipedia.org/wiki/Linear_differential_equation#First-order_equation_with_variable_coefficients), concretely we have 
+
+$$
+S'(t) = -\lambda(t)S(t)\quad\text{and}\quad S(0) = 1
+$$
+where the hazard function/rate $\lambda(t)$ is a non-negative function, such that $S(t)$ is monotonically non-increasing and has values in $(0, 1]$. The log of the survival function is then
+$$
+\log S(t) = -\int_0^t\lambda(\tau) d\tau.
+$$
+
+As $S(t)$ models the survival (the non-occurence of an event), the **log likelihood of the occurence of an event at a given time $t$** is 
+$$
+\log p_1(t) = \log -S'(t) = \log \lambda(t) + \log S(t) =  \log \lambda(t) -\int_0^t\lambda(\tau) d\tau
+$$
+and the **log likelihood of survival up to at least time $t$** is
+$$
+\log p_0(t) = \log S(t) = -\int_0^t\lambda(\tau) d\tau.
+$$
+
+The first term ($p_1(t)$) will have to be used for the likelihood contribution of observations of the event occuring (survival up to exactly time $t$), while the second term ($p_0(t)$) will have to be used for the likelihood contribution of observations of the event not ocurring until the end of the observation time, aka as censored observations. 
+
+If the hazard function $\lambda(\tau)$ is constant and if we do not care about constant terms (as e.g. during MCMC) we can use the [Poisson distribution](https://en.wikipedia.org/wiki/Poisson_distribution) to compute the appropriate terms "automatically". For piecewise constant hazard functions, it's possible to chain individual Poisson likelihoods to compute the overall likelihood (modulo a constant term).
+
+
+For **piecewise constant hazard functions** of the form 
+$$
+\lambda(t) = \begin{cases}
+    \lambda_1 & \text{if } t \in [t_0, t_1],\\
+    \lambda_2 & \text{if } t \in (t_1, t_2],\\
+    \dots
+\end{cases}
+$$ 
+with $0 = t_0 < t_1 < t_2 < \dots$ the survival function can be directly computed as 
+$$
+\log S(t_j) = -\sum_{i=1}^j (t_i-t_{i-1}) \lambda_i.
+$$
+
+
+## Why do *this*? Why reimplement things?
+
+Out of curiosity, to figure out whether. and to demonstrate that I understand survival analysis. 
+Writing down the math is nice and all, but to get correct simulation results, every little detail has to be right. 
+At least in principle, in practice the simulation can still be subtly wrong due to errors which don't crash everything, but only e.g. introduce biases.
+
+## Simulation
+
+<details>
+  <summary>Simulated data</summary>
+
+To simulate the data, we generate (for 100 persons) 
+
+* the `age` from a Poisson distribution with mean 55,
+* the gender (`male` or not) from a Bernoulli distribution with mean 1/2,
+* assume a constant (in time) hazard function, computed from `age` and `male` as `log(hazard) = -3 + .5 * male`,
+* draw true survival times `true_t` from an Exponential distribution with rate parameter `hazard`,
+* cap them at a `censor_time` of 20, i.e. `t = min(true_t, censor_time)`, and 
+* set `survived` to `true` if `true_t > censor_time` and false otherwise.
+
+::: {.panel-tabset}
+
+### Dataframe
+
+```{julia}
+include("index.jl")  
+sim = Simulation(100, 20., @formula(log_rate~1+male), [-3,.5]);
+sim.df  
+```
+### Code
+
+Currently, the used `formula`/`rate_form` is hardcoded to match the examples.
+
+```{.julia include="../src/functions.jl" snippet="sim_data_exp_correlated"} 
+```
+
+:::
+</details>
+
+For all simulations, 
+
+* we model the hazard function $\lambda_i(t)$ of person $i = 1,\dots,100$ to be piecewise constant, with as many pieces as there are unique event times, plus a final one which goes from the largest event observation time to the censor,
+* every person's hazard function is unique (provided the covariates are unique),
+* the personwise ($i$) and timeslabwise ($j$) hazard values will be of the form 
+$$
+\log\lambda_{i,j} = \log a  + \log\kappa_j + \langle{}X_i,\beta_j\rangle{},
+$$
+where $\log a$ is a scalar intercept, $\log\kappa_j$ is a time-varying (but person-constant) effect, $X_i$ are the $i$-th person's covariates, and $\beta_j$ are the potentially time-varying covariate effects (in timeslab $j$). For the first two models, $\beta$ will be constant, while it will vary for the last model.
+
+### `pem_survival_model`
+
+::: {.panel-tabset}
+
+#### Discussion
+
+The easiest model. The covariate effects are constant ($\beta_1=\beta_2=\dots$) and the time-varying (but person-constant) effect $\log\kappa_j$ has a hierarchical normal prior with mean 0 and unkown scale (with standard half-normal prior). There seems to be small mistake in the original model, where at line 42 (AFAICT) `log_t_dur = log(t_obs)` assign the logarithm of the event *time* to the variable which has to contain the logarithm of the timeslab width.
+
+#### Posterior parameter and predictive plots
+
+```{julia}
+plot_summary(sim.lr1...; sim.df) 
+```
+
+#### Reimplemented model
+
+```{.julia include="../src/models.jl" snippet="pem_survival_model"} 
+```
+
+#### Original model
+
+```{.stan include="survivalstan/pem_survival_model.stan"}
+```
+
+:::
+
+### `pem_survival_model_randomwalk`
+
+::: {.panel-tabset}
+
+#### Discussion
+
+Identical to the first model, except that the time-varying (but person-constant) effect $\log\kappa_j$ should have a "random walk" prior. AFAICT, the original model has the same small mistake as the first one (this time at line 43), but **IMO some (minor) other things goes "wrong" in constructing the "random walk" prior, or rather, I believe that instead of a random walk prior as implemented in the original code, an approximate Brownian motion / Wiener process prior would have been a better choice:**
+
+*A random walk prior as implemented in the original code will imply different priors for different numbers of persons and also for different realizations of the event times, while an approximate Wiener process prior does not (or rather, much less).* Consider the following:
+
+##### (Gaussian) random walk prior
+
+For random walk parameters $x_1, x_2, \dots$ with scale parameter $\sigma$, the (conditional) prior density is
+$$
+    p(x_i | x_{i-1}) = p_\mathcal{N}(x_i | x_{i-1}, \sigma^2) \text{ for } i=1,2,\dots
+$$
+and with $x_0$ another parameter with appropriate prior.
+
+##### Approximate (Gaussian) Wiener process prior
+
+Following [Wikipedia](https://en.wikipedia.org/wiki/Wiener_process):
+
+> The Wiener process $W_t$ is characterised by the following properties: 
+> [...] W has Gaussian increments: [...] $W_{t+i} - W_t \sim \mathcal{N}(0,u)$.
+
+I.e., for timepoints $0 = t_0 < t_1 < t_2 < \dots$ as above, the (conditional) prior density of the (shifted) Wiener process
+values $x_1, x_2, \dots$ with scale parameter $\sigma$ is
+$$
+    p(x_i | x_{i-1}) = p_\mathcal{N}(x_i | x_{i-1}, (t_i-t_{i-1})\sigma^2) \text{ for } i=1,2,\dots
+$$
+and with $x_0$ as before.
+
+##### Dependence on the observed event times
+
+The difference between the two priors will become most easily apparent by looking at the implied prior on the (log) hazard at (or right before) the censor time $t_\text{censor} = t_{N+1}$, for varying numbers of unique observed event times $N$. For the **random walk prior**, we'll have 
+$$
+x_j \sim \mathcal{N}(x_0, j\sigma^2) \text{ for } j = 1,\dots,N+1,
+$$
+while for the **Wiener process prior**, we'll have
+$$
+x_j \sim \mathcal{N}(0, t_j\sigma^2) \text{ for } j = 1,\dots,N+1.
+$$
+In particular, for $j=N+1$ (i.e. at censor time), we get a constant prior distribution for the Wiener process prior, but for the random walk prior we get a prior distribution that depends on the number of unique observed event times $N$. Similarly, even for fixed $N$, there is a (potentially strong) dependence of the implied prior for "interior" time slabs on the realization of the even times for the random walk prior, while there's "no" dependence of the implied prior for the Wiener process prior. *Caveat: There* will *actually be a dependence of the implied prior on the event time realizations also for the Wiener process, but this is only due to the piecewise-constant "assumption" and can be interpreted as an approximation error to the solution of the underlying stochastic differential equation.*
+
+
+
+
+#### Posterior parameter and predictive plots
+
+```{julia}
+plot_summary(sim.lr2...; sim.df)
+```
+
+#### Reimplemented model
+
+```{.julia include="../src/models.jl" snippet="pem_survival_model_randomwalk"} 
+```
+
+#### Original model
+
+```{.stan include="survivalstan/pem_survival_model_randomwalk.stan"}
+```
+
+:::
+
+### `pem_survival_model_timevarying`
+
+::: {.panel-tabset}
+
+#### Discussion
+
+To be finished. To keep things short: 
+
+* The original model has the same minor problems as the other models.
+* While the original model implements a random walk prior on the *increments* of the covariate effects, I've kept things a bit simpler and instead just implemented the corresponding Wiener process prior on the *values* of the covariate effects. IMO, putting a given prior on the increments instead of on the values or vice versa is a *modeling decision*, and not a "mistake" by any stretch of the imagination. Doing one or the other implies different things, and which choice is "better" is not clear a priori and may depend on the setting.
+* I believe sampling may have failed a bit for the run included in this notebook. I believe I have seen better sampling "runs", but as this doesn't have to be perfect, I've left it as is.
+
+#### Posterior parameter and predictive plots
+
+```{julia}
+plot_summary(sim.lr3...; sim.df)
+```
+
+#### Reimplemented model
+
+```{.julia include="../src/models.jl" snippet="pem_survival_model_timevarying"} 
+```
+
+#### Original model
+
+```{.stan include="survivalstan/pem_survival_model_timevarying.stan"}
+```
+
+:::
+
+## Addendum / Disclaimer
+
+* I am aware that survivalstan hasn't been updated in the last 7 years (according to [github](https://github.com/hammerlab/survivalstan)). I have not implemented the above models to unearth any errors or write a competitor. I believe but haven't checked, that the "actual" models used by survivalstan are "more" correct. I was mainly curious whether I could do it, and I wanted to see how well [StanBlocks.jl](https://github.com/nsiccha/StanBlocks.jl) does.
+* I've skipped the `pem_survival_model_gamma` model showcased at [https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_gamma%20with%20simulated%20data.html](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_gamma%20with%20simulated%20data.html) because I did not understand why the widths of the timeslabs should affect the **shape** parameter of the Gamma prior. Only after implementing the time varying models did I discover the models at [https://nbviewer.org/github/hammerlab/survivalstan/blob/master/example-notebooks/Test%20new_gamma_survival_model%20with%20simulated%20data.ipynb](https://nbviewer.org/github/hammerlab/survivalstan/blob/master/example-notebooks/Test%20new_gamma_survival_model%20with%20simulated%20data.ipynb). Also, the ["Worked examples" page](https://jburos.github.io/survivalstan/Examples.html) lists a ["User-supplied PEM survival model with gammahazard"](https://jburos.github.io/survivalstan/examples/Test%20new_gamma_survival_model%20with%20simulated%20data.html), though for some reason it does not show up in the sidebar for either of the other examples, compare [https://jburos.github.io/survivalstan/examples/Example-using-pem_survival_model.html](https://jburos.github.io/survivalstan/examples/Example-using-pem_survival_model.html), [https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_gamma%20with%20simulated%20data.html](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_gamma%20with%20simulated%20data.html), [https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_randomwalk%20with%20simulated%20data.html](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_randomwalk%20with%20simulated%20data.html) and [https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_timevarying%20with%20simulated%20data.html](https://jburos.github.io/survivalstan/examples/Test%20pem_survival_model_timevarying%20with%20simulated%20data.html).
+ 
